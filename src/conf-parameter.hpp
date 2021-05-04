@@ -27,6 +27,7 @@
 #include "test-access-control.hpp"
 #include "adjacency-list.hpp"
 #include "name-prefix-list.hpp"
+#include "midst-prefix-list.hpp"
 
 #include <ndn-cxx/face.hpp>
 #include <ndn-cxx/security/validator-config.hpp>
@@ -107,6 +108,16 @@ enum HyperbolicState {
   HYPERBOLIC_STATE_ON = 1,
   HYPERBOLIC_STATE_DRY_RUN = 2,
   HYPERBOLIC_STATE_DEFAULT = 0
+};
+
+enum MidstState {
+  MIDST_STATE_OFF = 0,
+  MIDST_STATE_ON = 1,
+  MIDST_STATE_ON_2 = 2,
+};
+
+enum {
+  HOP_DISTANCE_DEFAULT = 10,
 };
 
 enum {
@@ -380,6 +391,36 @@ public:
   }
 
   void
+  setMidstState(int32_t ihc)
+  {
+    m_midstState = ihc;
+  }
+
+  int32_t
+  getMidstState() const
+  {
+    return m_midstState;
+  }
+
+  void
+  setHopDistance(double distance)
+  {
+    m_hopDistance = distance;
+  }
+
+  double
+  getHopDistance() const
+  {
+    return m_hopDistance;
+  }
+
+  MidstPrefixList&
+  getMidstPrefixList()
+  {
+    return m_mipl;
+  }
+
+  void
   setMaxFacesPerPrefix(uint32_t mfpp)
   {
     m_maxFacesPerPrefix = mfpp;
@@ -521,6 +562,9 @@ private:
   double m_corR;
   std::vector<double> m_corTheta;
 
+  int32_t m_midstState;
+  double  m_hopDistance;
+
   uint32_t m_maxFacesPerPrefix;
 
   std::string m_stateFileDir;
@@ -534,6 +578,7 @@ PUBLIC_WITH_TESTS_ELSE_PRIVATE:
 
   AdjacencyList m_adjl;
   NamePrefixList m_npl;
+  MidstPrefixList m_mipl;
   ndn::security::ValidatorConfig m_validator;
   ndn::security::ValidatorConfig m_prefixUpdateValidator;
   ndn::security::SigningInfo m_signingInfo;

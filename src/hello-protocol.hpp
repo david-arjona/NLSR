@@ -26,6 +26,7 @@
 #include "test-access-control.hpp"
 #include "conf-parameter.hpp"
 #include "lsdb.hpp"
+#include "dv-message.hpp"
 #include "route/routing-table.hpp"
 
 #include <ndn-cxx/util/signal.hpp>
@@ -42,7 +43,7 @@ class HelloProtocol
 {
 public:
   HelloProtocol(ndn::Face& face, ndn::KeyChain& keyChain, ConfParameter& confParam,
-                RoutingTable& routingTable, Lsdb& lsdb);
+                RoutingTable& routingTable, Lsdb& lsdb, DvMessage& dvMessage);
 
   /*! \brief Sends a Hello Interest packet.
    *
@@ -137,6 +138,8 @@ private:
   RoutingTable& m_routingTable;
   Lsdb& m_lsdb;
   AdjacencyList& m_adjacencyList;
+  DvMessage& m_dvMessage;
+  SequencingManager m_sequencingManager;
 
 PUBLIC_WITH_TESTS_ELSE_PRIVATE:
   static const std::string INFO_COMPONENT;

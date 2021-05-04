@@ -242,6 +242,50 @@ private:
   static const double UNKNOWN_RADIUS;
 };
 
+class DvRoutingCalculator
+{
+public:
+  DvRoutingCalculator(int32_t nRouters, ndn::Name thisRouterName)
+    : m_nRouters(nRouters)
+    , m_thisRouterName(thisRouterName)
+  {
+  }
+
+  void
+  calculatePath(Map& map, RoutingTable& rtable, AdjacencyList& adjacencies,
+                Lsdb& lsdb);
+
+private:
+  void
+  initDistanceVector(ndn::optional<int32_t> thisRouter);
+
+  void
+  fillDisVecDirectNeighborsDistance(Map& map, Lsdb& lsdb);
+
+  void
+  fillDisVecOtherNeighborsDistance(Map& map, Lsdb& lsdb);
+
+  void
+  addNextHop(ndn::Name destRtr, std::string faceUri, double distance,
+             RoutingTable& rt);
+
+  void
+  printDistanceVector() const;
+  
+private:
+  const int32_t    m_nRouters;
+  const ndn::Name  m_thisRouterName;
+  static const ndn::optional<ndn::Name>  UNKNOWN_HROUTER;
+
+  enum DvTupleIndex {
+    DISTANCE,
+    NEXTHOP
+  };
+  
+  using DvTuple = std::tuple<double, ndn::optional<ndn::Name>>;
+  std::vector<DvTuple> distance_vector;
+};
+
 } // namespace nlsr
 
 #endif // NLSR_ROUTING_TABLE_CALCULATOR_HPP

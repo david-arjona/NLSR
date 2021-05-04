@@ -23,6 +23,7 @@
 
 #include "logger.hpp"
 #include "nlsr.hpp"
+#include "tlv-nlsr.hpp"
 #include "utility/name-helper.hpp"
 
 namespace nlsr {
@@ -44,7 +45,8 @@ Lsdb::Lsdb(ndn::Face& face, ndn::KeyChain& keyChain, ConfParameter& confParam)
   , m_lsaRefreshTime(ndn::time::seconds(m_confParam.getLsaRefreshTime()))
   , m_adjLsaBuildInterval(m_confParam.getAdjLsaBuildInterval())
   , m_thisRouterPrefix(m_confParam.getRouterPrefix())
-  , m_sequencingManager(m_confParam.getStateFileDir(), m_confParam.getHyperbolicState())
+  , m_sequencingManager(m_confParam.getStateFileDir(), m_confParam.getHyperbolicState(),
+                        m_confParam.getMidstState())
   , m_onNewLsaConnection(m_sync.onNewLsa->connect(
       [this] (const ndn::Name& updateName, uint64_t sequenceNumber,
               const ndn::Name& originRouter) {
@@ -68,7 +70,10 @@ Lsdb::Lsdb(ndn::Face& face, ndn::KeyChain& keyChain, ConfParameter& confParam)
     },
     m_confParam.getSigningInfo(), ndn::nfd::ROUTE_FLAG_CAPTURE);
 
-  buildAndInstallOwnNameLsa();
+  if (m_confParam.getMidstState() == MIDST_STATE_OFF) {
+    buildAndInstallOwnNameLsa();
+  }
+
   // Install coordinate LSAs if using HR or dry-run HR.
   if (m_confParam.getHyperbolicState() != HYPERBOLIC_STATE_OFF) {
     buildAndInstallOwnCoordinateLsa();
@@ -105,6 +110,18 @@ Lsdb::buildAndInstallOwnCoordinateLsa()
 }
 
 void
+Lsdb::buildAndInstallOwnMidstLsa()
+{
+  MidstLsa midstLsa(m_thisRouterPrefix, m_sequencingManager.getMidstLsaSeq() + 1,
+                  getLsaExpirationTimePoint(), m_confParam.getMidstPrefixList());
+  m_sequencingManager.increaseMidstLsaSeq();
+  m_sequencingManager.writeSeqNoToFile();
+  //m_sync.publishRoutingUpdate(Lsa::Type::NAME, m_sequencingManager.getNameLsaSeq());
+
+  installLsa(std::make_shared<MidstLsa>(midstLsa));
+}
+
+void
 Lsdb::scheduleAdjLsaBuild()
 {
   m_adjBuildCount++;
@@ -112,6 +129,11 @@ Lsdb::scheduleAdjLsaBuild()
   if (m_confParam.getHyperbolicState() == HYPERBOLIC_STATE_ON) {
     // Don't build adjacency LSAs in hyperbolic routing
     NLSR_LOG_DEBUG("Adjacency LSA not built. Currently in hyperbolic routing state.");
+    return;
+  }
+
+  if (m_confParam.getMidstState() != MIDST_STATE_OFF) {
+    buildAdjLsa();
     return;
   }
 
@@ -128,12 +150,18 @@ Lsdb::scheduleAdjLsaBuild()
 void
 Lsdb::writeLog() const
 {
-  static const Lsa::Type types[] = {Lsa::Type::COORDINATE, Lsa::Type::NAME, Lsa::Type::ADJACENCY};
+  static const Lsa::Type types[] = {Lsa::Type::COORDINATE, Lsa::Type::NAME,
+                                    Lsa::Type::MIDST, Lsa::Type::ADJACENCY};
   for (const auto& type : types) {
     if ((type == Lsa::Type::COORDINATE &&
          m_confParam.getHyperbolicState() == HYPERBOLIC_STATE_OFF) ||
         (type == Lsa::Type::ADJACENCY &&
        m_confParam.getHyperbolicState() == HYPERBOLIC_STATE_ON)) {
+      continue;
+    }
+
+    if ((type == Lsa::Type::MIDST) &&
+        (m_confParam.getMidstState() == MIDST_STATE_OFF)) {
       continue;
     }
 
@@ -187,8 +215,14 @@ Lsdb::processInterest(const ndn::Name& name, const ndn::Interest& interest)
     }
 
     incrementInterestRcvdStats(interestedLsType);
-    if (processInterestForLsa(interest, originRouter, interestedLsType, seqNo)) {
-      lsaIncrementSignal(Statistics::PacketType::SENT_LSA_DATA);
+
+    if (interestedLsType == Lsa::Type::MIDST) {
+      NLSR_LOG_ERROR("Error: Trying to process a MIDST interest from the Lsdb.");
+    }
+    else {
+      if (processInterestForLsa(interest, originRouter, interestedLsType, seqNo)) {
+        lsaIncrementSignal(Statistics::PacketType::SENT_LSA_DATA);
+      }
     }
   }
   // else the interest is for other router's LSA, serve signed data from LsaSegmentStorage
@@ -204,12 +238,23 @@ Lsdb::processInterestForLsa(const ndn::Interest& interest, const ndn::Name& orig
 {
   NLSR_LOG_DEBUG(interest << " received for " << lsaType);
   if (auto lsaPtr = findLsa(originRouter, lsaType)) {
-    NLSR_LOG_TRACE("Verifying SeqNo for " << lsaType << " is same as requested.");
-    if (lsaPtr->getSeqNo() == seqNo) {
-      m_segmentPublisher.publish(interest.getName(), interest.getName(), lsaPtr->wireEncode(),
-                                 m_lsaRefreshTime, m_confParam.getSigningInfo());
-      incrementDataSentStats(lsaType);
-      return true;
+    if (m_confParam.getMidstState() == MIDST_STATE_OFF) {
+      NLSR_LOG_TRACE("Verifying SeqNo for " << lsaType << " is same as requested.");
+      if (lsaPtr->getSeqNo() == seqNo) {
+        m_segmentPublisher.publish(interest.getName(), interest.getName(), lsaPtr->wireEncode(),
+                                   m_lsaRefreshTime, m_confParam.getSigningInfo());
+        incrementDataSentStats(lsaType);
+        return true;
+      }
+    }
+    else {
+      if (lsaType == Lsa::Type::ADJACENCY) {
+        m_segmentPublisher.publish(interest.getName(), interest.getName(),
+                               lsaPtr->wireEncode(),
+                               m_lsaRefreshTime, m_confParam.getSigningInfo());
+        incrementDataSentStats(lsaType);
+        return true;
+      }
     }
   }
   else {
@@ -239,6 +284,11 @@ Lsdb::installLsa(std::shared_ptr<Lsa> lsa)
     onLsdbModified(lsa, LsdbUpdate::INSTALLED, {}, {});
 
     lsa->setExpiringEventId(scheduleLsaExpiration(lsa, timeToExpire));
+
+    if ((lsa->getType() == Lsa::Type::MIDST) &&
+        (m_confParam.getMidstState() == MIDST_STATE_ON)) {
+      increaseMidstLsaSeqNo();
+    }
   }
   // Else this is a known name LSA, so we are updating it.
   else if (chkLsa->getSeqNo() < lsa->getSeqNo()) {
@@ -253,12 +303,28 @@ Lsdb::installLsa(std::shared_ptr<Lsa> lsa)
 
     if (updated) {
       onLsdbModified(lsa, LsdbUpdate::UPDATED, namesToAdd, namesToRemove);
+
+      if ((lsa->getType() == Lsa::Type::MIDST) &&
+          (m_confParam.getMidstState() == MIDST_STATE_ON)) {
+        increaseMidstLsaSeqNo();
+      }
     }
 
     chkLsa->setExpiringEventId(scheduleLsaExpiration(chkLsa, timeToExpire));
     NLSR_LOG_DEBUG("Updated " << lsa->getType() << " LSA:");
     NLSR_LOG_DEBUG(chkLsa->toString());
   }
+}
+
+void
+Lsdb::increaseMidstLsaSeqNo()
+{
+  auto chkMidstLsa = findLsa(m_thisRouterPrefix, Lsa::Type::MIDST);
+  chkMidstLsa->setSeqNo(chkMidstLsa->getSeqNo() + 1);
+  NLSR_LOG_DEBUG("MIDST LSA SeqNo increased to " << chkMidstLsa->getSeqNo());
+
+  m_sequencingManager.increaseMidstLsaSeq();
+  m_sequencingManager.writeSeqNoToFile();
 }
 
 void
@@ -538,6 +604,118 @@ Lsdb::afterFetchLsa(const ndn::ConstBufferPtr& bufferPtr, const ndn::Name& inter
       NLSR_LOG_TRACE("LSA data decoding error :( " << e.what());
     }
   }
+}
+
+uint64_t
+Lsdb::wireDecode(const ndn::Block& wire)
+{
+  MidstLsa midstLsa;
+  ndn::Block m_wire = wire;
+
+  // Decode ndn::tlv::Content type
+  if (m_wire.type() != ndn::tlv::Content) {
+    NDN_THROW(ndn::tlv::Error("ndn::tlv::Content", m_wire.type()));
+  }
+
+  m_wire.parse();
+  auto val = m_wire.elements_begin();
+
+  if (val->type() != ndn::tlv::nlsr::Lsdb) {
+    NDN_THROW(ndn::tlv::Error("ndn::tlv::nlsr::Lsdb", val->type()));
+  }
+
+  ndn::Block dataBlock = *val;
+
+  midstLsa.wireDecode(dataBlock);
+
+  installLsa(std::make_shared<MidstLsa>(midstLsa));
+  
+  // Return the sequence number from the Data packet.
+  return midstLsa.getSeqNo();
+}
+
+template<ndn::encoding::Tag TAG>
+size_t
+Lsdb::wireEncode(ndn::EncodingImpl<TAG>& block,
+                 const ndn::Name& neighbor) const
+{
+  double extraDistance = 0;
+  size_t totalLength = 0;
+  auto   mLsaRange = getLsdbIterator<MidstLsa>();
+  
+  for (auto mLsaIt = mLsaRange.first; mLsaIt != mLsaRange.second; mLsaIt++) {
+    auto mLsaPtr = std::static_pointer_cast<MidstLsa>(*mLsaIt);
+
+    // Do not announce its own information to a neighbor. This is
+    // similar to a poisoned announcement.
+    if (mLsaPtr->getOriginRouter() != neighbor) {
+      extraDistance = getExtraDistance(mLsaPtr->getOriginRouter());
+      mLsaPtr->setTempDistance(extraDistance);
+      
+      totalLength += mLsaPtr->wireEncode(block);
+      NLSR_LOG_DEBUG("Encoding router: " << mLsaPtr->getOriginRouter() <<
+                     " with additional distance: " << extraDistance);
+    }
+  }
+
+  // Completes encoding the MidstLsa info.
+  auto lsaPtr = findOwnMidstLsa();
+  extraDistance = -1;
+  lsaPtr->setTempDistance(extraDistance);
+
+  totalLength += lsaPtr->wireEncode(block);
+
+  NLSR_LOG_DEBUG("Encoding LSA router: " << lsaPtr->getOriginRouter() <<
+                 " with additional distance: " << extraDistance);
+  totalLength += block.prependVarNumber(totalLength);
+  totalLength += block.prependVarNumber(ndn::tlv::nlsr::Lsdb);
+
+  return totalLength;
+}
+
+const ndn::Block&
+Lsdb::wireEncode(const ndn::Name& neighbor) const
+{
+  ndn::EncodingEstimator estimator;
+  size_t estimatedSize = wireEncode(estimator, neighbor);
+
+  ndn::EncodingBuffer buffer(estimatedSize, 0);
+  wireEncode(buffer, neighbor);
+
+  m_wire = buffer.block();
+
+  return m_wire;
+}
+
+double
+Lsdb::getExtraDistance(const ndn::Name& origRouter) const
+{
+  double distance = 0;
+
+  if (origRouter != m_thisRouterPrefix) {
+    distance = m_confParam.getHopDistance();
+  }
+
+  return distance;
+}
+
+std::shared_ptr<MidstLsa>
+Lsdb::findOwnMidstLsa() const
+{
+  ndn::Block processContent;
+
+  auto mLsaRange = getLsdbIterator<MidstLsa>();
+  
+  for (auto mLsaIt = mLsaRange.first; mLsaIt != mLsaRange.second; mLsaIt++) {
+    auto mLsaPtr = std::static_pointer_cast<MidstLsa>(*mLsaIt);
+    //NLSR_LOG_DEBUG("findOwnMidst router: " << mLsaPtr->getOriginRouter());
+
+    if (mLsaPtr->getOriginRouter() == m_thisRouterPrefix) {
+      return mLsaPtr;
+    }
+  }
+
+  return nullptr;
 }
 
 } // namespace nlsr

@@ -36,7 +36,7 @@ namespace nlsr {
 class SequencingManager
 {
 public:
-  SequencingManager(const std::string& filePath, int hypState);
+  SequencingManager(const std::string& filePath, int hypState, int mState);
 
   void
   setLsaSeq(uint64_t seqNo, Lsa::Type lsaType)
@@ -50,6 +50,9 @@ public:
         break;
       case Lsa::Type::NAME:
         m_nameLsaSeq = seqNo;
+        break;
+      case Lsa::Type::MIDST:
+        m_midstLsaSeq = seqNo;
         break;
       default:
         return;
@@ -66,6 +69,8 @@ public:
         return m_corLsaSeq;
       case Lsa::Type::NAME:
         return m_nameLsaSeq;
+      case Lsa::Type::MIDST:
+        return m_midstLsaSeq;
       default:
         return 0;
     }
@@ -107,6 +112,18 @@ public:
     m_corLsaSeq = clsn;
   }
 
+  uint64_t
+  getMidstLsaSeq() const
+  {
+    return m_midstLsaSeq;
+  }
+
+  void
+  setMidstLsaSeq(uint64_t mlsn)
+  {
+    m_midstLsaSeq = mlsn;
+  }
+
   void
   increaseNameLsaSeq()
   {
@@ -123,6 +140,12 @@ public:
   increaseCorLsaSeq()
   {
     m_corLsaSeq++;
+  }
+
+  void
+  increaseMidstLsaSeq()
+  {
+    m_midstLsaSeq++;
   }
 
   void
@@ -149,10 +172,12 @@ private:
   uint64_t m_nameLsaSeq = 0;
   uint64_t m_adjLsaSeq = 0;
   uint64_t m_corLsaSeq = 0;
+  uint64_t m_midstLsaSeq = 0;
   std::string m_seqFileNameWithPath;
 
 PUBLIC_WITH_TESTS_ELSE_PRIVATE:
   int m_hyperbolicState;
+  int m_midstState;
 };
 
 } // namespace nlsr

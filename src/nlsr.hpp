@@ -28,6 +28,8 @@
 #include "hello-protocol.hpp"
 #include "lsdb.hpp"
 #include "name-prefix-list.hpp"
+#include "midst-prefix-list.hpp"
+#include "dv-message.hpp"
 #include "test-access-control.hpp"
 #include "publisher/dataset-interest-handler.hpp"
 #include "route/fib.hpp"
@@ -167,11 +169,13 @@ private:
   ConfParameter& m_confParam;
   AdjacencyList& m_adjacencyList;
   NamePrefixList& m_namePrefixList;
+  MidstPrefixList& m_midstPrefixList;
   std::vector<ndn::Name> m_strategySetOnRouters;
 
 PUBLIC_WITH_TESTS_ELSE_PRIVATE:
   Fib m_fib;
   Lsdb m_lsdb;
+  DvMessage m_dvMessage;
   RoutingTable m_routingTable;
   NamePrefixTable m_namePrefixTable;
   HelloProtocol m_helloProtocol;

@@ -96,6 +96,9 @@ private:
   bool
   processConfSectionHyperbolic(const ConfigSection& section);
 
+  bool
+  processConfSectionMidst(const ConfigSection& section);
+
   /*! \brief Set options for the FIB: nexthops per prefix, routing calculation interval.
    */
   bool

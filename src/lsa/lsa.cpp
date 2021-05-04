@@ -117,6 +117,10 @@ operator<<(std::ostream& os, const Lsa::Type& type)
     os << "NAME";
     break;
 
+  case nlsr::Lsa::Type::MIDST:
+    os << "MIDST";
+    break;
+
   default:
     os << "BASE";
     break;
@@ -137,6 +141,9 @@ operator>>(std::istream& is, Lsa::Type& type)
   }
   else if (typeString == "NAME") {
     type = Lsa::Type::NAME;
+  }
+  else if (typeString == "MIDST") {
+    type = Lsa::Type::MIDST;
   }
   else {
     type = Lsa::Type::BASE;

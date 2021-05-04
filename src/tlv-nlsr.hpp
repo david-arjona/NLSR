@@ -45,9 +45,14 @@ enum {
   ExpirationTime              = 139,
   Cost                        = 140,
   Uri                         = 141,
+  Lsdb                        = 142,
   NextHop                     = 143,
   RoutingTable                = 144,
-  RoutingTableEntry           = 145
+  RoutingTableEntry           = 145,
+  MidstLsa                    = 146,
+  MidstPrefixList             = 147,
+  Distance                    = 148,
+  SeqNo                       = 149
 };
 
 } // namespace nlsr

@@ -35,7 +35,7 @@ const std::string HelloProtocol::NLSR_COMPONENT = "nlsr";
 
 HelloProtocol::HelloProtocol(ndn::Face& face, ndn::KeyChain& keyChain,
                              ConfParameter& confParam, RoutingTable& routingTable,
-                             Lsdb& lsdb)
+                             Lsdb& lsdb, DvMessage& dvMessage)
   : m_face(face)
   , m_scheduler(m_face.getIoService())
   , m_keyChain(keyChain)
@@ -44,6 +44,9 @@ HelloProtocol::HelloProtocol(ndn::Face& face, ndn::KeyChain& keyChain,
   , m_routingTable(routingTable)
   , m_lsdb(lsdb)
   , m_adjacencyList(m_confParam.getAdjacencyList())
+  , m_dvMessage(dvMessage)
+  , m_sequencingManager(m_confParam.getStateFileDir(),
+           m_confParam.getHyperbolicState(), m_confParam.getMidstState())
 {
   ndn::Name name(m_confParam.getRouterPrefix());
   name.append(NLSR_COMPONENT);
@@ -244,6 +247,14 @@ HelloProtocol::onContentValidated(const ndn::Data& data)
         m_routingTable.scheduleRoutingTableCalculation();
       }
       else {
+        if (m_confParam.getMidstState() != MIDST_STATE_OFF) {
+          NLSR_LOG_DEBUG("Starting MIDST message exchange.");
+
+          ndn::Name adjInterest = m_dvMessage.buildAdjInterestPrefix(neighbor);
+          m_lsdb.expressInterest(adjInterest, 0);
+          m_dvMessage.expressInterest(neighbor, m_confParam.getInterestResendTime());
+        }
+
         m_lsdb.scheduleAdjLsaBuild();
       }
       onInitialHelloDataValidated(neighbor);

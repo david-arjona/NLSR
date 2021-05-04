@@ -43,17 +43,19 @@ SyncLogicHandler::SyncLogicHandler(ndn::Face& face, const IsLsaNew& isLsaNew,
                 m_nameLsaUserPrefix, m_confParam.getSyncInterestLifetime(),
                 std::bind(&SyncLogicHandler::processUpdate, this, _1, _2))
 {
-  m_adjLsaUserPrefix = ndn::Name(m_confParam.getSyncUserPrefix())
+  if (m_confParam.getMidstState() == MIDST_STATE_OFF) {
+    m_adjLsaUserPrefix = ndn::Name(m_confParam.getSyncUserPrefix())
                          .append(boost::lexical_cast<std::string>(Lsa::Type::ADJACENCY));
-  m_coorLsaUserPrefix = ndn::Name(m_confParam.getSyncUserPrefix())
+    m_coorLsaUserPrefix = ndn::Name(m_confParam.getSyncUserPrefix())
                          .append(boost::lexical_cast<std::string>(Lsa::Type::COORDINATE));
 
-  if (m_confParam.getHyperbolicState() != HYPERBOLIC_STATE_ON) {
-    m_syncLogic.addUserNode(m_adjLsaUserPrefix);
-  }
+    if (m_confParam.getHyperbolicState() != HYPERBOLIC_STATE_ON) {
+      m_syncLogic.addUserNode(m_adjLsaUserPrefix);
+    }
 
-  if (m_confParam.getHyperbolicState() != HYPERBOLIC_STATE_OFF) {
-    m_syncLogic.addUserNode(m_coorLsaUserPrefix);
+    if (m_confParam.getHyperbolicState() != HYPERBOLIC_STATE_OFF) {
+      m_syncLogic.addUserNode(m_coorLsaUserPrefix);
+    }
   }
 }
 
@@ -108,6 +110,14 @@ SyncLogicHandler::processUpdateFromSync(const ndn::Name& originRouter,
                        "is enabled. Not going to fetch.");
         return;
       }
+      
+      if (lsaType == Lsa::Type::NAME && seqNo != 0 &&
+          m_confParam.getMidstState() != MIDST_STATE_OFF) {
+        NLSR_LOG_ERROR("Got an update for name LSA when MIDST " <<
+                       "is enabled. Not going to fetch.");
+        return;
+      }
+
       (*onNewLsa)(updateName, seqNo, originRouter);
     }
   }

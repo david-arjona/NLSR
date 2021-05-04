@@ -32,8 +32,10 @@ namespace nlsr {
 
 INIT_LOGGER(SequencingManager);
 
-SequencingManager::SequencingManager(const std::string& filePath, int hypState)
+SequencingManager::SequencingManager(const std::string& filePath, int hypState,
+                                     int mState)
   : m_hyperbolicState(hypState)
+  , m_midstState(mState)
 {
   setSeqFileDirectory(filePath);
   initiateSeqNoFromFile();
@@ -47,7 +49,8 @@ SequencingManager::writeSeqNoToFile() const
   std::ostringstream os;
   os << "NameLsaSeq " << std::to_string(m_nameLsaSeq) << "\n"
      << "AdjLsaSeq "  << std::to_string(m_adjLsaSeq)  << "\n"
-     << "CorLsaSeq "  << std::to_string(m_corLsaSeq);
+     << "CorLsaSeq "  << std::to_string(m_corLsaSeq)  << "\n"
+     << "MidstLsaSeq " << std::to_string(m_midstLsaSeq);
   outputFile << os.str();
   outputFile.close();
 }
@@ -64,12 +67,23 @@ SequencingManager::initiateSeqNoFromFile()
     inputFile >> seqType >> m_nameLsaSeq;
     inputFile >> seqType >> m_adjLsaSeq;
     inputFile >> seqType >> m_corLsaSeq;
+    inputFile >> seqType >> m_midstLsaSeq;
 
     inputFile.close();
 
     // Increment by 10 in case last run of NLSR was not able to write to file
     // before crashing
-    m_nameLsaSeq += 10;
+    // Increment the Name LSA seq. no. if MIDST is NOT enabled
+    if (m_midstState == MIDST_STATE_OFF) {
+      m_nameLsaSeq += 10;
+    }
+
+    // Send a warning message if hyperbolic routing and MIDST are enabled
+    if ((m_hyperbolicState != HYPERBOLIC_STATE_OFF) &&
+    	(m_midstState == MIDST_STATE_ON)) {
+      NLSR_LOG_WARN("Hyperbolic routing and MIDST should not be enabled"
+                 << " at the same time.");
+    }
 
     // Increment the adjacency LSA seq. no. if link-state or dry HR is enabled
     if (m_hyperbolicState != HYPERBOLIC_STATE_ON) {
@@ -77,6 +91,11 @@ SequencingManager::initiateSeqNoFromFile()
         NLSR_LOG_WARN("This router was previously configured for hyperbolic " <<
                       "routing without clearing the seq. no. file.");
         m_corLsaSeq = 0;
+      }
+      if (m_midstLsaSeq != 0) {
+        NLSR_LOG_WARN("This router was previously configured for MIDST"
+                  << " without clearing the seq. no. file.");
+        m_midstLsaSeq = 0;
       }
       m_adjLsaSeq += 10;
     }
@@ -88,7 +107,27 @@ SequencingManager::initiateSeqNoFromFile()
                       "routing without clearing the seq. no. file.");
         m_adjLsaSeq = 0;
       }
+      if (m_midstLsaSeq != 0) {
+        NLSR_LOG_WARN("This router was previously configured for MIDST"
+                  << " without clearing the seq. no. file.");
+        m_midstLsaSeq = 0;
+      }
       m_corLsaSeq += 10;
+    }
+
+    // Increment the MIDST LSA seq. no. if MIDST is enabled
+    if (m_midstState == MIDST_STATE_ON) {
+      if (m_corLsaSeq != 0) {
+        NLSR_LOG_WARN("This router was previously configured for hyperbolic"
+                   << " routing without clearing the seq. no. file.");
+        m_corLsaSeq = 0;
+      }
+      if (m_nameLsaSeq != 0) {
+        NLSR_LOG_WARN("This router was previously configured for link-state"
+                   << " routing without clearing the name seq. no. file.");
+        m_nameLsaSeq = 0;
+      }
+      m_midstLsaSeq += 10;
     }
   }
   writeLog();
@@ -120,7 +159,13 @@ SequencingManager::writeLog() const
       m_hyperbolicState == HYPERBOLIC_STATE_DRY_RUN) {
     NLSR_LOG_DEBUG("Cor LSA Seq no: " << m_corLsaSeq);
   }
-  NLSR_LOG_DEBUG("Name LSA Seq no: " << m_nameLsaSeq);
+
+  if (m_midstState == MIDST_STATE_ON){
+    NLSR_LOG_DEBUG("MIDST LSA Seq no: " << m_midstLsaSeq);
+  }
+  else{
+    NLSR_LOG_DEBUG("Name LSA Seq no: " << m_nameLsaSeq);
+  }
 }
 
 } // namespace nlsr

@@ -50,11 +50,14 @@ ConfParameter::ConfParameter(ndn::Face& face, ndn::KeyChain& keyChain,
   , m_infoInterestInterval(HELLO_INTERVAL_DEFAULT)
   , m_hyperbolicState(HYPERBOLIC_STATE_OFF)
   , m_corR(0)
+  , m_midstState(MIDST_STATE_OFF)
+  , m_hopDistance(HOP_DISTANCE_DEFAULT)
   , m_maxFacesPerPrefix(MAX_FACES_PER_PREFIX_MIN)
   , m_syncInterestLifetime(ndn::time::milliseconds(SYNC_INTEREST_LIFETIME_DEFAULT))
   , m_syncProtocol(SYNC_PROTOCOL_PSYNC)
   , m_adjl()
   , m_npl()
+  , m_mipl()
   , m_validator(makeCertificateFetcher(face))
   , m_prefixUpdateValidator(std::make_unique<ndn::security::CertificateFetcherDirectFetch>(face))
   , m_keyChain(keyChain)
@@ -86,6 +89,8 @@ ConfParameter::writeLog()
       NLSR_LOG_INFO("Hyp Angle " << i++ << ": "<< value);
     }
   }
+  NLSR_LOG_INFO("MIDST Routing: " << m_midstState);
+  NLSR_LOG_INFO("Hop Distance: " << m_hopDistance);
   NLSR_LOG_INFO("State Directory: " << m_stateFileDir);
 
   // Event Intervals

@@ -23,6 +23,7 @@
 #define NLSR_LSA_LSA_HPP
 
 #include "name-prefix-list.hpp"
+#include "midst-prefix-list.hpp"
 #include "adjacent.hpp"
 #include "adjacency-list.hpp"
 #include "test-access-control.hpp"
@@ -51,6 +52,7 @@ public:
     ADJACENCY,
     COORDINATE,
     NAME,
+    MIDST,
     BASE
   };
 

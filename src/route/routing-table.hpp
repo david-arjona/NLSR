@@ -136,6 +136,10 @@ private:
   void
   calculateHypRoutingTable(bool isDryRun);
 
+  /*! \brief Calculates a distance-vector routing table. */
+  void
+  calculateDvRoutingTable();
+
   void
   clearRoutingTable();
 

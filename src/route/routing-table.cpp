@@ -90,8 +90,8 @@ RoutingTable::calculate()
   if (m_isRoutingTableCalculating == false) {
     m_isRoutingTableCalculating = true;
 
-    if (m_hyperbolicState == HYPERBOLIC_STATE_OFF) {
-      calculateLsRoutingTable();
+    if (m_confParam.getMidstState() == MIDST_STATE_ON) {
+      calculateDvRoutingTable();
     }
     else if (m_hyperbolicState == HYPERBOLIC_STATE_DRY_RUN) {
       calculateLsRoutingTable();
@@ -99,6 +99,9 @@ RoutingTable::calculate()
     }
     else if (m_hyperbolicState == HYPERBOLIC_STATE_ON) {
       calculateHypRoutingTable(false);
+    }
+    else {
+      calculateLsRoutingTable();
     }
 
     m_isRouteCalculationScheduled = false;
@@ -169,6 +172,41 @@ RoutingTable::calculateHypRoutingTable(bool isDryRun)
     afterRoutingChange(m_rTable);
     NLSR_LOG_DEBUG(*this);
   }
+}
+
+void
+RoutingTable::calculateDvRoutingTable()
+{
+  NLSR_LOG_DEBUG("RoutingTable::calculateDvRoutingTable Called");
+
+  if (m_lsdb.getIsBuildAdjLsaScheduled()) {
+    NLSR_LOG_DEBUG("Adjacency build is scheduled, routing table can not be calculated :(");
+    return;
+  }
+
+  // We only check this in LS since we never remove our own Coordinate LSA,
+  // whereas we remove our own Adjacency LSA if we don't have any neighbors
+  if (!m_ownAdjLsaExist) {
+    return;
+  }
+
+  clearRoutingTable();
+
+  Map map;
+  auto lsaRange = m_lsdb.getLsdbIterator<MidstLsa>();
+  map.createFromMidstLsdb(lsaRange.first, lsaRange.second);
+  map.writeLog();
+
+  size_t nRouters = map.getMapSize();
+
+  DvRoutingCalculator calculator(nRouters, m_confParam.getRouterPrefix());
+
+  calculator.calculatePath(map, *this, m_confParam.getAdjacencyList(),
+                           m_lsdb);
+
+  NLSR_LOG_DEBUG("Calling Update NPT with new Route");
+  afterRoutingChange(m_rTable);
+  NLSR_LOG_DEBUG(*this);
 }
 
 void

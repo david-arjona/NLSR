@@ -27,6 +27,7 @@
 #include "lsa/name-lsa.hpp"
 #include "lsa/coordinate-lsa.hpp"
 #include "lsa/adj-lsa.hpp"
+#include "lsa/midst-lsa.hpp"
 #include "sequencing-manager.hpp"
 #include "test-access-control.hpp"
 #include "communication/sync-logic-handler.hpp"
@@ -81,6 +82,43 @@ public:
   */
   void
   buildAndInstallOwnNameLsa();
+
+  /*! \brief Builds a MIDST LSA for this router and installs it into the LSDB. */
+  void
+  buildAndInstallOwnMidstLsa();
+
+  /*! \brief Passes the correct Adjacency sequence number to other
+      classes.
+  */
+  uint64_t
+  getAdjLsaSeqNo() const
+  {
+    return m_sequencingManager.getAdjLsaSeq();
+  }
+
+  /*! \brief Passes the correct MIDST sequence number to other
+      classes.
+  */
+  uint64_t
+  getMidstLsaSeqNo() const
+  {
+    return m_sequencingManager.getMidstLsaSeq();
+  }
+
+  uint64_t
+  wireDecode(const ndn::Block& wire);
+
+  template<ndn::encoding::Tag TAG>
+  size_t
+  wireEncode(ndn::EncodingImpl<TAG>& block,
+                 const ndn::Name& neighbor) const;
+
+  const ndn::Block&
+  wireEncode(const ndn::Name& neighbor) const;
+
+  void
+  expressInterest(const ndn::Name& interestName, uint32_t timeoutCount,
+                  ndn::time::steady_clock::TimePoint deadline = DEFAULT_LSA_RETRIEVAL_DEADLINE);
 
 PUBLIC_WITH_TESTS_ELSE_PRIVATE:
   /*! \brief Builds a cor. LSA for this router and installs it into the LSDB. */
@@ -188,6 +226,9 @@ PUBLIC_WITH_TESTS_ELSE_PRIVATE:
     else if (lsaType == Lsa::Type::COORDINATE) {
       lsaIncrementSignal(Statistics::PacketType::SENT_COORD_LSA_DATA);
     }
+    else if (lsaType == Lsa::Type::MIDST) {
+      lsaIncrementSignal(Statistics::PacketType::SENT_MIDST_DV_DATA);
+    }
   }
 
   void
@@ -201,6 +242,9 @@ PUBLIC_WITH_TESTS_ELSE_PRIVATE:
     else if (lsaType == Lsa::Type::COORDINATE) {
       lsaIncrementSignal(Statistics::PacketType::RCV_COORD_LSA_INTEREST);
     }
+    else if (lsaType == Lsa::Type::MIDST) {
+      lsaIncrementSignal(Statistics::PacketType::RCV_MIDST_DV_INTEREST);
+    }
   }
 
   void
@@ -213,6 +257,9 @@ PUBLIC_WITH_TESTS_ELSE_PRIVATE:
     }
     else if (lsaType == Lsa::Type::COORDINATE) {
       lsaIncrementSignal(Statistics::PacketType::SENT_COORD_LSA_INTEREST);
+    }
+    else if (lsaType == Lsa::Type::MIDST) {
+      lsaIncrementSignal(Statistics::PacketType::SENT_MIDST_DV_INTEREST);
     }
   }
 
@@ -277,10 +324,6 @@ PUBLIC_WITH_TESTS_ELSE_PRIVATE:
   processInterestForLsa(const ndn::Interest& interest, const ndn::Name& originRouter,
                         Lsa::Type lsaType, uint64_t seqNo);
 
-  void
-  expressInterest(const ndn::Name& interestName, uint32_t timeoutCount,
-                  ndn::time::steady_clock::TimePoint deadline = DEFAULT_LSA_RETRIEVAL_DEADLINE);
-
   /*!
      \brief Error callback when SegmentFetcher fails to return an LSA
 
@@ -322,6 +365,15 @@ PUBLIC_WITH_TESTS_ELSE_PRIVATE:
     return ndn::time::system_clock::now() + ndn::time::seconds(m_confParam.getRouterDeadInterval());
   }
 
+  void
+  increaseMidstLsaSeqNo();
+
+  double
+  getExtraDistance(const ndn::Name& origRouter) const;
+
+  std::shared_ptr<MidstLsa>
+  findOwnMidstLsa() const;
+
 public:
   ndn::util::Signal<Lsdb, Statistics::PacketType> lsaIncrementSignal;
   ndn::util::Signal<Lsdb, ndn::Data> afterSegmentValidatedSignal;
@@ -342,6 +394,8 @@ PUBLIC_WITH_TESTS_ELSE_PRIVATE:
   ndn::time::seconds m_lsaRefreshTime;
   ndn::time::seconds m_adjLsaBuildInterval;
   const ndn::Name& m_thisRouterPrefix;
+
+  mutable ndn::Block m_wire;
 
   // Maps the name of an LSA to its highest known sequence number from sync;
   // Used to stop NLSR from trying to fetch outdated LSAs

@@ -23,6 +23,7 @@
 
 #include "common.hpp"
 #include "lsa/adj-lsa.hpp"
+#include "lsa/midst-lsa.hpp"
 
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/hashed_index.hpp>
@@ -101,6 +102,20 @@ public:
     BOOST_STATIC_ASSERT_MSG(is_iterator<IteratorType>::value, "IteratorType must be an iterator!");
     for (auto lsa = begin; lsa != end; lsa++) {
       addEntry((*lsa)->getOriginRouter());
+    }
+  }
+
+  template<typename IteratorType>
+  void
+  createFromMidstLsdb(IteratorType begin, IteratorType end)
+  {
+    BOOST_STATIC_ASSERT_MSG(is_iterator<IteratorType>::value, "IteratorType must be an iterator!");
+    for (auto lsa = begin; lsa != end; lsa++) {
+      auto mtLsa = std::static_pointer_cast<MidstLsa>(*lsa);
+      addEntry(mtLsa->getOriginRouter());
+      for (const auto& anchor : mtLsa->getNpl().getNames()) {
+        addEntry(mtLsa->getNpl().getAnchor(anchor));
+      }
     }
   }
 

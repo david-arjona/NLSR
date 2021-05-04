@@ -41,12 +41,14 @@ Nlsr::Nlsr(ndn::Face& face, ndn::KeyChain& keyChain, ConfParameter& confParam)
   , m_confParam(confParam)
   , m_adjacencyList(confParam.getAdjacencyList())
   , m_namePrefixList(confParam.getNamePrefixList())
+  , m_midstPrefixList(confParam.getMidstPrefixList())
   , m_fib(m_face, m_scheduler, m_adjacencyList, m_confParam, keyChain)
   , m_lsdb(m_face, keyChain, m_confParam)
+  , m_dvMessage(m_face, keyChain, confParam, m_lsdb)
   , m_routingTable(m_scheduler, m_lsdb, m_confParam)
   , m_namePrefixTable(confParam.getRouterPrefix(), m_fib, m_routingTable,
                       m_routingTable.afterRoutingChange, m_lsdb.onLsdbModified)
-  , m_helloProtocol(m_face, keyChain, confParam, m_routingTable, m_lsdb)
+  , m_helloProtocol(m_face, keyChain, confParam, m_routingTable, m_lsdb, m_dvMessage)
   , m_onNewLsaConnection(m_lsdb.getSync().onNewLsa->connect(
       [this] (const ndn::Name& updateName, uint64_t sequenceNumber,
               const ndn::Name& originRouter) {
@@ -99,7 +101,14 @@ Nlsr::Nlsr(ndn::Face& face, ndn::KeyChain& keyChain, ConfParameter& confParam)
                   std::bind(&Nlsr::onFaceDatasetFetchTimeout, this, _1, _2, 0));
 
   m_adjacencyList.writeLog();
-  NLSR_LOG_DEBUG(m_namePrefixList);
+
+  // Print the correct prefix list
+  if (m_confParam.getMidstState() != MIDST_STATE_OFF) {
+    NLSR_LOG_DEBUG(m_midstPrefixList);
+  }
+  else {
+    NLSR_LOG_DEBUG(m_namePrefixList);
+  }
 
   // Need to set direct neighbors' costs to 0 for hyperbolic routing
   if (m_confParam.getHyperbolicState() == HYPERBOLIC_STATE_ON) {

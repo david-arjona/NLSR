@@ -197,6 +197,10 @@ ConfFileProcessor::processSection(const std::string& sectionName, const ConfigSe
   {
     ret = processConfSectionHyperbolic(section);
   }
+  else if (sectionName == "midst")
+  {
+    ret = processConfSectionMidst(section);
+  }
   else if (sectionName == "fib")
   {
     ret = processConfSectionFib(section);
@@ -571,6 +575,71 @@ ConfFileProcessor::processConfSectionHyperbolic(const ConfigSection& section)
     std::cerr << ex.what() << std::endl;
     if (state == "on" || state == "dry-run") {
       return false;
+    }
+  }
+
+  return true;
+}
+
+bool
+ConfFileProcessor::processConfSectionMidst(const ConfigSection& section)
+{
+  // state
+  std::string state = section.get<std::string>("state", "off");
+
+  if (boost::iequals(state, "off")) {
+    m_confParam.setMidstState(MIDST_STATE_OFF);
+  }
+  else if (boost::iequals(state, "on")) {
+    m_confParam.setMidstState(MIDST_STATE_ON);
+  }
+  else if (state == "on-2") {
+    m_confParam.setMidstState(MIDST_STATE_ON_2);
+  }
+  else {
+    std::cerr << "Wrong format for MIDST state." << std::endl;
+    std::cerr << "Allowed value: off, on, on-2" << std::endl;
+
+    return false;
+  }
+
+  double hopDist = section.get<int>("set-hop-distance", HOP_DISTANCE_DEFAULT);
+  m_confParam.setHopDistance(hopDist);
+
+  // Variables and instructions specific to MIDST are processed here.
+  for (ConfigSection::const_iterator tn =
+       section.begin(); tn != section.end(); ++tn) {
+    if (tn->first == "root-anchor") {
+      try {
+        ConfigSection CommandAttriTree = tn->second;
+        
+        std::string prefix = CommandAttriTree.get<std::string>("prefix");
+        ndn::Name namePrefix(prefix);
+        if (namePrefix.empty()) {
+          std::cerr << " Wrong prefix format! [prefix /name/prefix] or bad URI"
+                    << std::endl;
+          return false;
+        }
+
+        double distance = CommandAttriTree.get<int>("distance");
+        
+        std::string anchor = CommandAttriTree.get<std::string>("anchor");
+        ndn::Name nameAnchor(anchor);
+        if (nameAnchor.empty()) {
+          std::cerr << " Wrong anchor format! [anchor /name/prefix] or bad URI"
+                    << std::endl;
+          return false;
+        }
+        
+        uint32_t seqNo = CommandAttriTree.get<uint32_t>("seqno");
+
+        m_confParam.getMidstPrefixList().insert(namePrefix, distance,
+                                                nameAnchor, seqNo);
+      }
+      catch (const std::exception& ex) {
+        std::cerr << ex.what() << std::endl;
+        return false;
+      }
     }
   }
 

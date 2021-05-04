@@ -640,4 +640,146 @@ HyperbolicRoutingCalculator::addNextHop(ndn::Name dest, std::string faceUri,
   }
 }
 
+const ndn::optional<ndn::Name> DvRoutingCalculator::UNKNOWN_HROUTER = "";
+
+void
+DvRoutingCalculator::calculatePath(Map& map, RoutingTable& rtable,
+                                   AdjacencyList& adjList,
+                                   Lsdb& lsdb)
+{
+  NLSR_LOG_TRACE("DvRoutingCalculator::calculatePath Called");
+
+  ndn::optional<int32_t> thisRouter = map.getMappingNoByRouterName(m_thisRouterName);
+
+  // Initialize the distance vector
+  initDistanceVector(thisRouter);
+  printDistanceVector();
+
+  fillDisVecDirectNeighborsDistance(map, lsdb);
+  printDistanceVector();
+
+  fillDisVecOtherNeighborsDistance(map, lsdb);
+  printDistanceVector();
+
+  // After calculating the shorter distances from this router to its
+  // neighbors, install the nexthops for this router
+  for (int32_t i=0; i<m_nRouters; i++){
+    // Do not add a next-hop to itself
+    if (i == thisRouter) {
+      continue;
+    }
+
+    ndn::optional<ndn::Name>  dest = map.getRouterNameByMappingNo(i);
+    ndn::optional<ndn::Name> nhRtr = std::get<DvTupleIndex::NEXTHOP>(distance_vector[i]);
+    std::string        nextHopFace = adjList.getAdjacent(*nhRtr).getFaceUri().toString();
+    
+    addNextHop(*dest, nextHopFace,
+               std::get<DvTupleIndex::DISTANCE>(distance_vector[i]), rtable);
+  }
+}
+
+void
+DvRoutingCalculator::initDistanceVector(ndn::optional<int32_t> thisRouter)
+{
+  distance_vector.clear();
+
+  for (int32_t i=0; i<m_nRouters; i++) {
+    if (i == thisRouter) {
+      distance_vector.emplace_back(0, UNKNOWN_HROUTER);
+    }
+    else {
+      distance_vector.emplace_back(Adjacent::NON_ADJACENT_COST, UNKNOWN_HROUTER);
+    }
+  }
+  NLSR_LOG_TRACE("Number of routers in DV = " << m_nRouters);
+}
+
+void
+DvRoutingCalculator::fillDisVecDirectNeighborsDistance(Map& map, Lsdb& lsdb)
+{
+  auto lsaRange = lsdb.getLsdbIterator<AdjLsa>();
+
+  for (auto lsaIt = lsaRange.first; lsaIt != lsaRange.second; lsaIt++) {
+    auto lsaPtr = std::static_pointer_cast<AdjLsa>(*lsaIt);
+
+    // Perform this operation only for direct neighbors
+    if (lsaPtr->getOriginRouter() == m_thisRouterName) {
+
+      for (const auto& adj : lsaPtr->getAdl().getAdjList()) {
+        ndn::optional<int32_t> neighRtr = map.getMappingNoByRouterName(adj.getName());
+
+        std::get<DvTupleIndex::DISTANCE>(distance_vector[*neighRtr]) = adj.getLinkCost();
+        std::get<DvTupleIndex::NEXTHOP>(distance_vector[*neighRtr])  = adj.getName();
+      }
+    }
+  }
+}
+
+void
+DvRoutingCalculator::fillDisVecOtherNeighborsDistance(Map& map, Lsdb& lsdb)
+{
+  auto mLsaRange = lsdb.getLsdbIterator<MidstLsa>();
+
+  for (auto mLsaIt = mLsaRange.first; mLsaIt != mLsaRange.second; mLsaIt++) {
+    auto mLsaPtr = std::static_pointer_cast<MidstLsa>(*mLsaIt);
+
+    // Do not repeat the operations done by the direct neighbors method
+    if (mLsaPtr->getOriginRouter() == m_thisRouterName) {
+      continue;
+    }
+
+    ndn::optional<int32_t> xRtr = map.getMappingNoByRouterName(mLsaPtr->getOriginRouter());
+
+    for (const auto& adj : mLsaPtr->getNpl().getNames()) {
+      double        distance = mLsaPtr->getNpl().getDistance(adj);
+      const ndn::Name anchor = mLsaPtr->getNpl().getAnchor(adj);
+      ndn::optional<int32_t> yRtr = map.getMappingNoByRouterName(anchor);
+      
+      double calc_distance = std::get<DvTupleIndex::DISTANCE>(distance_vector[*xRtr])
+                             + distance;     
+      
+      if ((std::get<DvTupleIndex::DISTANCE>(distance_vector[*yRtr]) == Adjacent::NON_ADJACENT_COST)
+          ||
+          (std::get<DvTupleIndex::DISTANCE>(distance_vector[*yRtr]) > calc_distance)) {
+        std::get<DvTupleIndex::DISTANCE>(distance_vector[*yRtr]) = calc_distance;
+        std::get<DvTupleIndex::NEXTHOP>(distance_vector[*yRtr])  = mLsaPtr->getOriginRouter();
+      }
+    }
+  }
+}
+
+void
+DvRoutingCalculator::addNextHop(ndn::Name destRtr, std::string faceUri,
+                                double distance, RoutingTable& rtgTable)
+{
+  NextHop hop(faceUri, distance);
+
+  NLSR_LOG_TRACE("Calculated " << hop << " for destination: " << destRtr);
+  rtgTable.addNextHop(destRtr, hop);
+}
+
+void
+DvRoutingCalculator::printDistanceVector() const
+{
+  if (!ndn_cxx_getLogger().isLevelEnabled(ndn::util::LogLevel::DEBUG)) {
+    return;
+  }
+
+  NLSR_LOG_DEBUG("--------Distance Vector--------");
+  NLSR_LOG_DEBUG(" Dest | Dist | Next hop");
+  NLSR_LOG_DEBUG("-------------------------------");
+
+  for(int32_t i=0; i<m_nRouters; i++) {
+    std::string line = "   ";
+    line += boost::lexical_cast<std::string>(i);
+    line += "  | ";
+    line += boost::lexical_cast<std::string>(
+            std::get<DvRoutingCalculator::DvTupleIndex::DISTANCE>(distance_vector[i]));
+    line += "  | ";
+    line += boost::lexical_cast<std::string>(
+            *std::get<DvRoutingCalculator::DvTupleIndex::NEXTHOP>(distance_vector[i]));
+    NLSR_LOG_DEBUG(line);
+  }
+}
+
 } // namespace nlsr

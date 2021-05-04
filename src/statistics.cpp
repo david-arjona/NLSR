@@ -78,18 +78,22 @@ operator<<(std::ostream& os, const Statistics& stats)
      << "    Sent Adjacency LSA Interests: "      << stats.get(PacketType::SENT_ADJ_LSA_INTEREST) << "\n"
      << "    Sent Coordinate LSA Interests: "     << stats.get(PacketType::SENT_COORD_LSA_INTEREST) << "\n"
      << "    Sent Name LSA Interests: "           << stats.get(PacketType::SENT_NAME_LSA_INTEREST) << "\n"
+     << "    Sent MIDST DV Interests: "           << stats.get(PacketType::SENT_MIDST_DV_INTEREST) << "\n"
      << "\n"
      << "    Received Adjacency LSA Interests: "  << stats.get(PacketType::RCV_ADJ_LSA_INTEREST) << "\n"
      << "    Received Coordinate LSA Interests: " << stats.get(PacketType::RCV_COORD_LSA_INTEREST) << "\n"
      << "    Received Name LSA Interests: "       << stats.get(PacketType::RCV_NAME_LSA_INTEREST) << "\n"
+     << "    Received MIDST DV Interests: "       << stats.get(PacketType::RCV_MIDST_DV_INTEREST) << "\n"
      << "\n"
      << "    Sent Adjacency LSA Data: "           << stats.get(PacketType::SENT_ADJ_LSA_DATA) << "\n"
      << "    Sent Coordinate LSA Data: "          << stats.get(PacketType::SENT_COORD_LSA_DATA) << "\n"
      << "    Sent Name LSA Data: "                << stats.get(PacketType::SENT_NAME_LSA_DATA) << "\n"
+     << "    Sent MIDST DV Data: "                << stats.get(PacketType::SENT_MIDST_DV_DATA) << "\n"
      << "\n"
      << "    Received Adjacency LSA Data: "       << stats.get(PacketType::RCV_ADJ_LSA_DATA) << "\n"
      << "    Received Coordinate LSA Data: "      << stats.get(PacketType::RCV_COORD_LSA_DATA) << "\n"
      << "    Received Name LSA Data: "            << stats.get(PacketType::RCV_NAME_LSA_DATA) << "\n"
+     << "    Received MIDST DV Data: "            << stats.get(PacketType::RCV_MIDST_DV_DATA) << "\n"
      << "++++++++++++++++++++++++++++++++++++++++\n";
 
   return os;
